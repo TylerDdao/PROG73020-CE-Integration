@@ -1,6 +1,8 @@
 from flask import Flask, render_template, request, jsonify, make_response
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 
 @app.route('/')
 def home():
@@ -42,7 +44,24 @@ def restock_request():
          }, 200
       
 
+@app.route("/checkout")
+def checkout():
+    cart_items = [
+        {"name": "Sample Item", "price": 20, "quantity": 1, "image": "/static/sample.jpg"}
+    ]
 
+    subtotal = 20
+    tax = 2
+    total = 22
+
+    return render_template(
+        "checkout.html",
+        cart_items=cart_items,
+        subtotal=subtotal,
+        tax=tax,
+        total=total
+    )
    
 if __name__ == '__main__':
    app.run(host='0.0.0.0', port=7500, debug=True)
+

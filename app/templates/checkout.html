@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Checkout</title>
+
+  <!-- Global styles -->
+  <link rel="stylesheet" href="/static/styles.css" />
+
+  <!-- Checkout styles -->
+  <link rel="stylesheet" href="/static/checkout.css" />
+</head>
+
+<body>
+
+  <!-- HEADER -->
+  <div id="header-placeholder"></div>
+
+  <div class="checkout-page">
+
+    <h1 class="checkout-page-title">Checkout</h1>
+
+    <div class="checkout-container">
+
+      <!-- ══════════ LEFT: DELIVERY + PAYMENT ══════════ -->
+      <div class="checkout-left">
+
+        <!-- DELIVERY DETAILS -->
+        <div class="checkout-section">
+          <div class="section-header">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+              <circle cx="12" cy="10" r="3"></circle>
+            </svg>
+            <h2 class="section-title">Delivery Details</h2>
+          </div>
+
+          <div class="field-group">
+            <div class="form-field">
+              <label class="form-label">Address Line 1 <span class="required">*</span></label>
+              <input type="text" class="form-input" placeholder="123 King St W" />
+            </div>
+
+            <div class="form-field">
+              <label class="form-label">Address Line 2 <span class="optional">(optional)</span></label>
+              <input type="text" class="form-input" placeholder="Unit 5, Apt 2B, etc." />
+            </div>
+
+            <div class="field-row">
+              <div class="form-field">
+                <label class="form-label">City <span class="required">*</span></label>
+                <div class="select-wrapper">
+                  <select class="form-input form-select">
+                    <option value="">Select city</option>
+                    <option>Waterloo</option>
+                    <option>Kitchener</option>
+                    <option>Cambridge</option>
+                    <option>Guelph</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-field">
+                <label class="form-label">Province</label>
+                <input type="text" class="form-input" placeholder="ON" value="ON" />
+              </div>
+
+              <div class="form-field">
+                <label class="form-label">Postal Code <span class="required">*</span></label>
+                <input type="text" class="form-input" placeholder="N2L 3G1" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- DELIVERY PREFERENCE -->
+        <div class="checkout-section">
+          <div class="section-header">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="1" y="3" width="15" height="13"></rect>
+              <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
+              <circle cx="5.5" cy="18.5" r="2.5"></circle>
+              <circle cx="18.5" cy="18.5" r="2.5"></circle>
+            </svg>
+            <h2 class="section-title">Delivery Preference</h2>
+          </div>
+
+          <div class="delivery-options">
+            <div class="delivery-option active" id="dropOffOption">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 11 12 14 22 4"></polyline>
+                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+              </svg>
+              <span class="delivery-option-label">Drop Off</span>
+              <span class="delivery-option-sub">Leave at door — no signature needed</span>
+            </div>
+
+            <div class="delivery-option" id="signatureOption">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h9"></path>
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+              </svg>
+              <span class="delivery-option-label">Signature Required</span>
+              <span class="delivery-option-sub">You must be home to receive</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAYMENT BANNER + PLACE ORDER -->
+        <div class="checkout-section">
+          <div class="payment-banner">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            <p style="margin:0">
+              <strong>No payment required.</strong> Your Farm to Fork food security benefits cover this order in full.
+            </p>
+          </div>
+
+          <button class="place-order-btn" id="placeOrderBtn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            Place Order
+          </button>
+        </div>
+
+      </div>
+
+      <!-- ══════════ RIGHT: ORDER SUMMARY ══════════ -->
+      <div class="checkout-right">
+
+        <div class="summary-box">
+
+          <div class="summary-header">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="9" cy="21" r="1"></circle>
+              <circle cx="20" cy="21" r="1"></circle>
+              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+            </svg>
+            <span class="summary-header-title">Order Summary</span>
+          </div>
+
+          <div class="summary-items">
+            {% for item in cart_items %}
+            <div class="summary-item">
+              <div class="summary-item-info">
+                <span class="summary-item-name">{{ item.name }}</span>
+                <span class="summary-item-qty">{{ item.sku }}</span>
+              </div>
+              <span class="summary-badge">{{ item.quantity }} {{ item.unit }}</span>
+            </div>
+            {% endfor %}
+          </div>
+
+          <div class="summary-total">
+            <span class="summary-total-label">Total Due</span>
+            <span class="summary-total-value">${{ total }}</span>
+          </div>
+
+          <div class="summary-note">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
+            Your food security benefits cover this order.
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div id="footer-placeholder"></div>
+
+  <script src="/static/component.js"></script>
+  <script src="/static/checkout.js"></script>
+
+</body>
+</html>
