@@ -1,5 +1,5 @@
 import requests
-from src.config import Config
+from config import Config
 
 
 class CISError(Exception):

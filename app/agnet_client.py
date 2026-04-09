@@ -10,7 +10,7 @@ import logging
 
 import requests
 
-from src.config import Config
+from config import Config
 
 logger = logging.getLogger(__name__)
 

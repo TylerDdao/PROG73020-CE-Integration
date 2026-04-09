@@ -4,7 +4,7 @@ from pathlib import Path
 
 import paramiko
 
-from src.config import Config
+from config import Config
 
 logger = logging.getLogger(__name__)
 
