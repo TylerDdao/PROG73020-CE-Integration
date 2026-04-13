@@ -1,0 +1,136 @@
+import mysql.connector
+import os
+import traceback
+
+def get_connection():
+    print("[INFO] Getting connection...")
+    return mysql.connector.connect(
+        host=os.environ.get("DB_HOST", "localhost"),
+        port=int(os.environ.get("DB_PORT", 3306)),
+        user=os.environ.get("DB_USER", "appuser"),
+        password=os.environ.get("DB_PASSWORD", "apppassword"),
+        database=os.environ.get("DB_NAME", "inventory"),
+    )
+
+def save_restock_request(vendor_id, manifests):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        if not vendor_id or not manifests:
+            raise ValueError("vendor_id or manifests missing")
+
+        cursor.execute(
+            "INSERT INTO restock_requests (vendor_id) VALUES (%s)",
+            (vendor_id,)
+        )
+        request_id = cursor.lastrowid
+
+        for manifest in manifests:
+            product_id = manifest.get("productId")
+            quantity = manifest.get("quantityOrder")
+
+            if product_id is None or quantity is None:
+                raise ValueError(f"Invalid manifest: {manifest}")
+
+            cursor.execute(
+                """INSERT INTO restock_requests_manifests 
+                   (request_id, product_id, quantity_order) 
+                   VALUES (%s, %s, %s)""",
+                (request_id, product_id, quantity)
+            )
+
+        conn.commit()
+        print(f"[INFO] Restock request {request_id} added")
+        return request_id
+
+    except Exception as e:
+        conn.rollback()
+        print("[ERROR] save_restock_request failed:")
+        traceback.print_exc()
+        return None
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_stock_events():
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute("""
+            SELECT 
+                se.stock_event_id,
+                se.status,
+                sep.product_id,
+                sep.quantity_change,
+                sep.unit
+            FROM stock_events se
+            LEFT JOIN stock_events_products sep 
+                ON se.stock_event_id = sep.stock_event_id
+            ORDER BY se.stock_event_id
+        """)
+
+        rows = cursor.fetchall()
+        events = {}
+
+        for row in rows:
+            eid = row["stock_event_id"]
+
+            if eid not in events:
+                events[eid] = {
+                    "eventId": eid,
+                    "status": row["status"],
+                    "products": []
+                }
+
+            if row["product_id"] is not None:
+                events[eid]["products"].append({
+                    "productId": row["product_id"],
+                    "quantityChange": row["quantity_change"],
+                    "unit": row["unit"]
+                })
+
+        print("[INFO] Stock events retrieved")
+        return list(events.values())
+
+    except Exception:
+        print("[ERROR] get_stock_events failed:")
+        traceback.print_exc()
+        return None
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def update_event_status(event_id, status):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        if not event_id or not status:
+            raise ValueError("Missing event_id or status")
+
+        cursor.execute(
+            "UPDATE stock_events SET status = %s WHERE stock_event_id = %s",
+            (status, event_id)
+        )
+
+        if cursor.rowcount == 0:
+            raise ValueError("Event not found")
+
+        conn.commit()
+        print(f"[INFO] Stock event {event_id} updated → {status}")
+        return True
+
+    except Exception:
+        print("[ERROR] update_event_status failed:")
+        traceback.print_exc()
+        return False
+
+    finally:
+        cursor.close()
+        conn.close()
