@@ -45,7 +45,7 @@ def restock_request():
       }, 200
 
 
-@app.route('/api/v1/stock_change', methods=["GET", "PUT"])
+@app.route('/api/v1/stock_change', methods=["GET", "PUT", "POST"])
 def stock_change():
    if request.method == "GET":
       if request.headers.get("X-API-Key") != "bestTeam":
@@ -75,6 +75,28 @@ def stock_change():
          "status": "success",
          "data": {"eventId": event_id, "status": status},
          "error": None
+      }, 200
+
+   elif request.method == "POST":
+      if request.headers.get("X-API-Key") != "bestTeam":
+         return unauthorized()
+      data = request.get_json()
+      products = data.get("products")
+      status = data.get("status")
+      if not products or not status:
+         return {
+           "status": "error",
+           "data": None,
+           "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "products and status are required"
+         }
+      }, 400
+      event_id = save_stock_event(products, status)
+      return {
+          "status": "success",
+          "data": {"eventId": event_id, "status": status},
+          "error": None
       }, 200
 
 if __name__ == '__main__':
