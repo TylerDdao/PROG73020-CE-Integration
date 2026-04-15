@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request
-from db import save_restock_request, get_stock_events, update_event_status
+from db import *
 from flask_cors import CORS
 
 app = Flask(__name__)
@@ -78,8 +78,8 @@ def stock_change():
       }, 200
 
    elif request.method == "POST":
-      if request.headers.get("X-API-Key") != "bestTeam":
-         return unauthorized()
+      # if request.headers.get("X-API-Key") != "bestTeam":
+      #    return unauthorized()
       data = request.get_json()
       products = data.get("products")
       status = data.get("status")

@@ -6,7 +6,7 @@ def get_connection():
     print("[INFO] Getting connection...")
     return mysql.connector.connect(
         host=os.environ.get("DB_HOST", "localhost"),
-        port=int(os.environ.get("DB_PORT", 3306)),
+        port=int(os.environ.get("DB_PORT", 3307)),
         user=os.environ.get("DB_USER", "appuser"),
         password=os.environ.get("DB_PASSWORD", "apppassword"),
         database=os.environ.get("DB_NAME", "inventory"),
@@ -43,6 +43,48 @@ def save_restock_request(vendor_id, manifests):
         conn.commit()
         print(f"[INFO] Restock request {request_id} added")
         return request_id
+
+    except Exception as e:
+        conn.rollback()
+        print("[ERROR] save_restock_request failed:")
+        traceback.print_exc()
+        return None
+
+    finally:
+        cursor.close()
+        conn.close()
+
+def save_stock_event(products, status):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        if not products :
+            raise ValueError("Products missing")
+
+        cursor.execute(
+            "INSERT INTO stock_events (status) VALUES (%s)",(status,)
+        )
+        event_id = cursor.lastrowid
+
+        for product in products:
+            product_id = product.get("productId")
+            quantity = product.get("quantityChange")
+            unit = product.get("unit")
+
+            if product_id is None or quantity is None:
+                raise ValueError(f"Invalid product: {product}")
+
+            cursor.execute(
+                """INSERT INTO stock_events_products 
+                   (stock_event_id, product_id, quantity_change, unit) 
+                   VALUES (%s, %s, %s, %s)""",
+                (event_id, product_id, quantity, unit,)
+            )
+
+        conn.commit()
+        print(f"[INFO] Stock event {event_id} posted")
+        return event_id
 
     except Exception as e:
         conn.rollback()

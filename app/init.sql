@@ -30,14 +30,14 @@ CREATE TABLE IF NOT EXISTS stock_events_products(
 
 -- Stock events
 INSERT INTO stock_events (status) VALUES ('pending');
-INSERT INTO stock_events (status) VALUES ('approved');
-INSERT INTO stock_events (status) VALUES ('declined');
+INSERT INTO stock_events (status) VALUES ('pending');
+INSERT INTO stock_events (status) VALUES ('pending');
 
 -- Stock event products
-INSERT INTO stock_events_products (stock_event_id, product_id, quantity_change, unit) VALUES (1, 'PROD-MILK', -10, 'l');
-INSERT INTO stock_events_products (stock_event_id, product_id, quantity_change, unit) VALUES (1, 'PROD-JUICE', -5, 'l');
-INSERT INTO stock_events_products (stock_event_id, product_id, quantity_change, unit) VALUES (2, 'WF-CARROTS', -8, 'kg');
-INSERT INTO stock_events_products (stock_event_id, product_id, quantity_change, unit) VALUES (2, 'WF-APPLES', -3, 'kg');
+INSERT INTO stock_events_products (stock_event_id, product_id, quantity_change, unit) VALUES (1, 'PROD-BEEF-GROUND', -100, 'kg');
+INSERT INTO stock_events_products (stock_event_id, product_id, quantity_change, unit) VALUES (2, 'PROD-BEEF-STEAK', -5, 'kg');
+INSERT INTO stock_events_products (stock_event_id, product_id, quantity_change, unit) VALUES (3, 'WF-CARROTS', -8, 'kg');
+INSERT INTO stock_events_products (stock_event_id, product_id, quantity_change, unit) VALUES (3, 'WF-APPLES', -3, 'kg');
 INSERT INTO stock_events_products (stock_event_id, product_id, quantity_change, unit) VALUES (3, 'PROD-BUTTER', -2, 'kg');
 
 -- Restock requests
