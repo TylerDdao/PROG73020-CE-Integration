@@ -1,19 +1,19 @@
 services:
-  flask_app:
-    build: .
-    container_name: flask_app
-    ports:
-      - "7500:7500"
-    environment:
-      - DB_HOST=mysql_db
-      - DB_PORT=3306
-      - DB_USER=appuser
-      - DB_PASSWORD=apppassword
-      - DB_NAME=inventory
-    depends_on:
-      mysql_db:
-        condition: service_healthy
-    restart: unless-stopped
+  # flask_app:
+  #   build: .
+  #   container_name: flask_app
+  #   ports:
+  #     - "7500:7500"
+  #   environment:
+  #     - DB_HOST=mysql_db
+  #     - DB_PORT=3306
+  #     - DB_USER=appuser
+  #     - DB_PASSWORD=apppassword
+  #     - DB_NAME=inventory
+  #   depends_on:
+  #     mysql_db:
+  #       condition: service_healthy
+  #   restart: unless-stopped
 
   mysql_db:
     image: mysql:8.0
@@ -27,33 +27,70 @@ services:
       - MYSQL_PASSWORD=apppassword
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql  # optional seed file
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "appuser", "-papppassword"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpassword"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
     restart: unless-stopped
 
   postgres_db:
-      image: postgres:16
-      container_name: postgres_db
-      ports:
-        - "5433:5432"
-      environment:
-        - POSTGRES_USER=pguser
-        - POSTGRES_PASSWORD=pgpassword
-        - POSTGRES_DB=inventory_pg
-      volumes:
-        - postgres_data:/var/lib/postgresql/data
-        - ./init_postgresql.sql:/docker-entrypoint-initdb.d/init.sql
-      healthcheck:
-        test: ["CMD-SHELL", "pg_isready -U pguser -d inventory_pg"]
-        interval: 10s
-        timeout: 5s
-        retries: 10
-      restart: unless-stopped
+    image: postgres:16
+    container_name: postgres_db
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=pguser
+      - POSTGRES_PASSWORD=pgpassword
+      - POSTGRES_DB=inventory_pg
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init_postgresql.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pguser -d inventory_pg"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
 
-  volumes:
-    mysql_data:
-    postgres_data:
+  app:
+    depends_on:
+      mysql_db:
+        condition: service_healthy
+    build:
+      context: .
+    container_name: app_service
+    working_dir: /app
+    volumes:
+      - ./:/app
+    command: python app.py
+    ports:
+      - "7500:7500"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DB_HOST=mysql_db
+      - DB_PORT=3306
+      - DB_USER=appuser
+      - DB_PASSWORD=apppassword
+      - DB_NAME=inventory
+
+  main:
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+    build:
+      context: .
+    container_name: main_service
+    working_dir: /app
+    volumes:
+      - ./:/app
+    command: python main.py
+    ports:
+      - "5001:5001"
+    environment:
+      - PYTHONUNBUFFERED=1
+
+volumes:
+  mysql_data:
+  postgres_data:

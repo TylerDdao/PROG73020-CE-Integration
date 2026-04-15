@@ -1,3 +1,6 @@
 flask
 mysql-connector-python
 flask-cors
+psycopg2-binary
+requests
+paramiko
