@@ -379,6 +379,10 @@ def create_app():
             "message": "Your order has been placed successfully!",
         }), 200
 
+    @app.route("/subscriptions", methods=["GET"])
+    def subscriptions():
+        return render_template("subscriptions.html")
+    
     return app
 
 

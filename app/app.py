@@ -51,10 +51,11 @@ def login():
 def providers():
     return render_template('providers.html')
 
-@app.route('/info')
-def info():
-    return render_template('info.html')
+@app.route("/subscriptions", methods=["GET"])
+def subscriptions():
+   return render_template("subscriptions.html")
 
+# return app
 
 @app.route('/api/v1/restock_request', methods=["GET", "POST"])
 def restock_request():
