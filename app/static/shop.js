@@ -1,388 +1,356 @@
-import logging
-import uuid
-from datetime import datetime, timezone
-
-import requests
-from flask import Flask, jsonify, redirect, render_template, request, session
-from flask_cors import CORS
-
-from agnet_client import AgNetError, get_product_catalog
-from cis_client import (
-    CISError,
-    InsufficientStockError,
-    LockExpiredError,
-    lock_inventory,
-    request_order_lock,
-    ship_locked_order,
-    ship_order,
-)
-from cfp_client import sync_primary_files
-from config import Config
-from db import get_customer, get_team_secret
-from ods_client import submit_delivery
-
-
-def create_app():
-    app = Flask(__name__)
-    app.secret_key = Config.SECRET_KEY
-    CORS(app)
-
-    # Sync CFP primary files on startup — non-blocking, failure is logged only
-    try:
-        sync_primary_files()
-    except Exception as e:
-        logging.getLogger(__name__).warning("CFP startup sync failed: %s", e)
-
-    # ------------------------------------------------------------------
-    # Homepage — shop (inventory from CIS + AgNet catalog)
-    # ------------------------------------------------------------------
-
-    @app.route("/", methods=["GET"])
-    def index():
-        _log = logging.getLogger(__name__)
-
-        cis_items = []
-        try:
-            cis_resp = requests.get(
-                f"{Config.CIS_BASE_URL}/inventory/pooled",
-                headers={"X-API-Key": Config.CIS_API_KEY},
-                timeout=8,
-            )
-            cis_resp.raise_for_status()
-            cis_items = cis_resp.json().get("items", [])
-        except Exception as e:
-            _log.warning("CIS inventory fetch failed: %s", e)
-
-        agnet_catalog = {}
-        try:
-            agnet_catalog = get_product_catalog()
-        except AgNetError as e:
-            _log.warning("AgNet catalog fetch failed: %s", e)
-
-        return render_template(
-            "index.html",
-            cis_items=cis_items,
-            agnet_catalog=list(agnet_catalog.values()),
-            client_id=session.get("client_id"),
-        )
-
-    @app.route("/api/inventory", methods=["GET"])
-    def api_inventory():
-        try:
-            resp = requests.get(
-                f"{Config.CIS_BASE_URL}/inventory/pooled",
-                headers={"X-API-Key": Config.CIS_API_KEY},
-                timeout=8,
-            )
-            resp.raise_for_status()
-            return jsonify(resp.json()), 200
-        except Exception as e:
-            return jsonify({"error": str(e)}), 503
-
-    # ------------------------------------------------------------------
-    # Team secret
-    # ------------------------------------------------------------------
-
-    @app.route("/secret", methods=["GET"])
-    def secret():
-        secret_value = get_team_secret()
-        return jsonify({"secret": secret_value}), 200
-
-    # ------------------------------------------------------------------
-    # C&S Authentication — login / callback / logout
-    # ------------------------------------------------------------------
-
-    @app.route("/login", methods=["GET", "POST"])
-    def login():
-        _log = logging.getLogger(__name__)
-
-        if request.method == "GET":
-            return render_template("login.html", error=None)
-
-        client_id = (request.form.get("client_id") or "").strip()
-        mobile    = (request.form.get("mobile") or "").strip()
-
-        if not client_id or not mobile:
-            return render_template("login.html", error="Please enter your Client ID and mobile number.")
-
-        try:
-            customer = get_customer(client_id, mobile)
-        except Exception as e:
-            _log.warning("DB error during login: %s", e)
-            return render_template("login.html", error="Service unavailable. Please try again.")
-
-        if not customer:
-            return render_template("login.html", error="Invalid Client ID or mobile number.")
-
-        import jwt as pyjwt
-        from datetime import timedelta
-        token = pyjwt.encode(
-            {
-                "client_id": customer["client_id"],
-                "exp": datetime.now(timezone.utc) + timedelta(hours=4),
-            },
-            Config.CS_JWT_PASS,
-            algorithm="HS256",
-        )
-        session["user_token"] = token
-        session["client_id"]  = customer["client_id"]
-
-        return redirect("/")
-
-    @app.route("/auth/cs", methods=["GET"])
-    def auth_cs():
-        """Optional fallback — accepts a C&S-issued JWT via query param."""
-        _log = logging.getLogger(__name__)
-        token = request.args.get("token", "").strip()
-
-        if not token:
-            return redirect("/login")
-
-        try:
-            import jwt as pyjwt
-            decoded = pyjwt.decode(token, Config.CS_JWT_PASS, algorithms=["HS256"])
-            client_id = decoded.get("client_id")
-            if not client_id:
-                raise ValueError("JWT missing client_id")
-            session["user_token"] = token
-            session["client_id"] = client_id
-        except Exception as e:
-            _log.warning("C&S auth callback failed: %s", e)
-            return redirect("/login")
-
-        return redirect("/")
-
-    @app.route("/logout", methods=["GET"])
-    def logout():
-        session.pop("user_token", None)
-        session.pop("client_id", None)
-        session.pop("cart_items", None)
-        return redirect("/")
-
-    # ------------------------------------------------------------------
-    # Tyler's routes — providers, info, restock
-    # ------------------------------------------------------------------
-
-    @app.route("/providers")
-    def providers():
-        return render_template("providers.html")
-
-    @app.route("/info")
-    def info():
-        return render_template("info.html")
-
-    @app.route("/api/v1/restock_request", methods=["GET", "POST"])
-    def restock_request():
-        if request.method == "POST":
-            if request.headers.get("X-API-Key") != "bestTeam":
-                return {
-                    "status": "error",
-                    "data": None,
-                    "error": {
-                        "code": "UNAUTHORIZED",
-                        "message": "Invalid team's secret or your team don't have permission for this API"
-                    }
-                }, 401
-            data = request.get_json()
-            print(f"vendorId: {data.get('vendorId')}")
-            print(f"manifest: {data.get('manifest')}")
-            return {"status": "success", "data": None, "error": None}, 200
-
-    # ------------------------------------------------------------------
-    # Legacy pass-through routes
-    # ------------------------------------------------------------------
-
-    @app.route("/orders/request", methods=["POST"])
-    def orders_request():
-        body = request.get_json(silent=True)
-        if not body or "items" not in body:
-            return jsonify({"error": "Missing required field: items"}), 400
-
-        items = body["items"]
-        if not isinstance(items, list) or len(items) == 0:
-            return jsonify({"error": "items must be a non-empty list"}), 400
-
-        try:
-            result = lock_inventory(items)
-            return jsonify(result), 200
-        except InsufficientStockError as e:
-            return jsonify({"error": str(e)}), 409
-        except CISError as e:
-            return jsonify({"error": str(e)}), e.status_code
-
-    @app.route("/orders/ship", methods=["POST"])
-    def orders_ship():
-        body = request.get_json(silent=True)
-        if not body or "order_id" not in body:
-            return jsonify({"error": "Missing required field: order_id"}), 400
-
-        order_id = body["order_id"]
-
-        try:
-            result = ship_order(order_id)
-            return jsonify(result), 200
-        except LockExpiredError as e:
-            return jsonify({"error": str(e)}), 410
-        except InsufficientStockError as e:
-            return jsonify({"error": str(e)}), 409
-        except CISError as e:
-            return jsonify({"error": str(e)}), e.status_code
-
-    # ------------------------------------------------------------------
-    # Checkout
-    # ------------------------------------------------------------------
-
-    @app.route("/checkout/demo", methods=["GET"])
-    def checkout_demo():
-        session["cart_items"] = [
-            {"productId": "PROD-CARROTS", "productName": "Carrots", "quantity": 2.5, "unit": "kg"},
-            {"productId": "PROD-ONIONS", "productName": "Onions", "quantity": 1.0, "unit": "kg"},
-            {"productId": "PROD-MILK", "productName": "Whole Milk", "quantity": 2.0, "unit": "l"},
-        ]
-        session["user_token"] = "demo-token"
-        return redirect("/checkout")
-
-    @app.route("/checkout/initiate", methods=["POST"])
-    def checkout_initiate():
-        body = request.get_json(silent=True)
-        if not body or "items" not in body:
-            return jsonify({"error": "Missing required field: items"}), 400
-
-        items = body["items"]
-        if not isinstance(items, list) or len(items) == 0:
-            return jsonify({"error": "items must be a non-empty list"}), 400
-
-        session["cart_items"] = items
-        session["user_token"] = body.get("userToken")
-
-        return jsonify({"redirect_url": "/checkout"}), 200
-
-    @app.route("/checkout", methods=["GET"])
-    def checkout():
-        cart_items = session.get("cart_items")
-        if not cart_items:
-            return jsonify({"error": "No cart found. Please start from the store."}), 400
-
-        prefill = {}
-        user_token = session.get("user_token")
-        if user_token:
-            try:
-                import jwt as pyjwt
-                from cfp_client import get_client
-                decoded = pyjwt.decode(user_token, Config.CS_JWT_PASS, algorithms=["HS256"])
-                client = get_client(decoded.get("client_id", ""))
-                if client and client.get("address"):
-                    addr = client["address"]
-                    parts = [p.strip() for p in addr.split(",")]
-                    if len(parts) >= 3:
-                        prov_postal = parts[-1].strip().split()
-                        prefill = {
-                            "addressLine1": parts[0],
-                            "city": parts[-2].strip(),
-                            "province": prov_postal[0] if prov_postal else "ON",
-                            "postalCode": prov_postal[1] if len(prov_postal) > 1 else "",
-                        }
-            except Exception as e:
-                logging.getLogger(__name__).warning("CFP address prefill failed: %s", e)
-
-        return render_template("checkout.html", cart_items=cart_items, prefill=prefill)
-
-    @app.route("/checkout/submit", methods=["POST"])
-    def checkout_submit():
-        body = request.get_json(silent=True)
-        if not body:
-            return jsonify({"error": "Invalid request body"}), 400
-
-        for field in ("addressLine1", "city", "province"):
-            if not body.get(field):
-                return jsonify({"error": f"Missing required field: {field}"}), 400
-
-        cart_items = body.get("items") or session.get("cart_items")
-        if not cart_items:
-            return jsonify({"error": "No cart found. Please start from the store."}), 400
-
-        drop_off = body.get("dropOff", True)
-
-        manifest = [
-            {"productId": item["productId"], "quantity": item["quantity"], "unit": item["unit"]}
-            for item in cart_items
-        ]
-
-        parts = [body["addressLine1"]]
-        if body.get("addressLine2"):
-            parts.append(body["addressLine2"])
-        postal = body.get("postalCode", "").strip()
-        city_line = f"{body['city']}, {body['province']}"
-        if postal:
-            city_line += f" {postal}"
-        parts.append(city_line)
-        shipping_address = ", ".join(parts)
-
-        f2f_order_id = (
-            f"F2F-{datetime.now(timezone.utc).strftime('%Y%m%d')}"
-            f"-{uuid.uuid4().hex[:8].upper()}"
-        )
-
-        try:
-            lock_result = request_order_lock(f2f_order_id, shipping_address, manifest)
-        except InsufficientStockError as e:
-            return jsonify({"error": "out_of_stock", "message": str(e)}), 409
-        except CISError as e:
-            return jsonify({"error": "cis_error", "message": str(e)}), 503
-
-        lock_order_id = lock_result["lockOrderId"]
-        lock_token    = lock_result["lockToken"]
-
-        try:
-            ship_result = ship_locked_order(lock_order_id, lock_token)
-        except LockExpiredError:
-            return jsonify({"error": "lock_expired", "message": "Order could not be finalised. Please try again."}), 409
-        except CISError as e:
-            return jsonify({"error": "cis_error", "message": str(e)}), 503
-
-        shipping_id = ship_result["shippingId"]
-
-        destination = {
-            "addressLine1": body["addressLine1"],
-            "addressLine2": body.get("addressLine2", ""),
-            "city": body["city"],
-            "province": body["province"],
-            "postalCode": body.get("postalCode", ""),
-        }
-        submit_delivery(f2f_order_id, shipping_id, destination, drop_off)
-
-        user_token = session.get("user_token")
-        if user_token:
-            try:
-                import jwt as pyjwt
-                decoded = pyjwt.decode(user_token, Config.CS_JWT_PASS, algorithms=["HS256"])
-                client_id = decoded.get("client_id")
-                if client_id:
-                    produce = sum(1 for i in cart_items if i.get("category") == "Produce")
-                    meat    = sum(1 for i in cart_items if i.get("category") == "Meat")
-                    dairy   = sum(1 for i in cart_items if i.get("category") == "Dairy")
-                    requests.post(
-                        f"{Config.CS_BASE_URL}/update-delivery",
-                        json={"client_id": client_id, "produce": produce, "meat": meat, "dairy": dairy},
-                        timeout=5,
-                    )
-            except Exception as e:
-                logging.getLogger(__name__).warning("C&S update-delivery failed: %s", e)
-
-        session.pop("cart_items", None)
-        session.pop("user_token", None)
-
-        return jsonify({
-            "status": "success",
-            "f2fOrderId": f2f_order_id,
-            "shippingId": shipping_id,
-            "message": "Your order has been placed successfully!",
-        }), 200
-
-    return app
-
-
-app = create_app()
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5001, debug=False)
+// ── Supply Network config ────────────────────────────────────────────────────
+// Change this one line when deploying to the live server
+const SUPPLY_API_URL = "http://localhost:5002";
+
+// ── Category emoji map ───────────────────────────────────────────────────────
+const CATEGORY_EMOJI = { Dairy: "🥛", Meat: "🥩", Produce: "🥦" };
+
+// ── Load packages from Supply Network API ───────────────────────────────────
+async function loadPackages() {
+  const container = document.getElementById("packagesContainer");
+  const loading   = document.getElementById("packagesLoading");
+
+  try {
+    const resp = await fetch(`${SUPPLY_API_URL}/api/inventory/packages`);
+    if (!resp.ok) throw new Error(`API returned ${resp.status}`);
+    const data = await resp.json();
+
+    // Group packages by category
+    const groups = {};
+    data.packages.forEach(pkg => {
+      if (!groups[pkg.category]) groups[pkg.category] = [];
+      groups[pkg.category].push(pkg);
+    });
+
+    // Build HTML
+    let html = "";
+    for (const [category, packages] of Object.entries(groups)) {
+      const emoji = CATEGORY_EMOJI[category] || "";
+      html += `
+        <div class="package-category-group" data-group-category="${category}">
+          <div class="package-category-heading">${emoji} ${category}</div>
+          <div class="package-cards-row">
+            ${packages.map(pkg => `
+              <div class="package-card"
+                   data-pkg-id="${pkg.packageId}"
+                   data-pkg-name="${pkg.category} Bundle — ${pkg.sizeKg} kg"
+                   data-pkg-category="${pkg.category}"
+                   data-pkg-size="${pkg.sizeKg}">
+                <div class="package-card-header">
+                  <div class="package-name">${pkg.category} Bundle</div>
+                  <span class="package-size-badge">${pkg.sizeKg} kg</span>
+                </div>
+                <button class="package-toggle-desc" onclick="toggleDesc(this)">What's inside ▾</button>
+                <div class="package-desc">
+                  <ul>
+                    ${pkg.contents.map(c => `<li>${c.qty} ${c.unit} ${c.item}</li>`).join("")}
+                  </ul>
+                </div>
+                <button class="package-add-btn ${!pkg.canFulfil ? 'unavailable' : ''}"
+                        onclick="addPackageToCart(this)"
+                        ${!pkg.canFulfil ? 'disabled title="Not enough stock"' : ""}>
+                  ${pkg.canFulfil ? "Add to Cart" : "Out of Stock"}
+                </button>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      `;
+    }
+
+    container.innerHTML = html;
+
+  } catch (err) {
+    console.warn("Supply Network unavailable, showing bundles as out of stock:", err);
+    renderFallbackPackages(container);
+    // Retry every 30 seconds until the API comes back
+    setTimeout(loadPackages, 30000);
+  }
+}
+
+// ── Fallback bundles (used when API is unreachable) ──────────────────────────
+function renderFallbackPackages(container) {
+  const fallback = [
+    { category: "Dairy",   sizeKg: 5,  packageId: "dairy-5",
+      contents: [{qty:2,unit:"kg",item:"Whole Milk"},{qty:1,unit:"kg",item:"Cheddar Cheese"},{qty:1,unit:"kg",item:"Plain Yogurt"},{qty:.5,unit:"kg",item:"Butter"},{qty:.5,unit:"kg",item:"Cream Cheese"}] },
+    { category: "Dairy",   sizeKg: 10, packageId: "dairy-10",
+      contents: [{qty:3,unit:"kg",item:"Whole Milk"},{qty:2,unit:"kg",item:"Cheddar Cheese"},{qty:2,unit:"kg",item:"Plain Yogurt"},{qty:1.5,unit:"kg",item:"Butter"},{qty:1,unit:"kg",item:"Cream Cheese"},{qty:.5,unit:"kg",item:"Sour Cream"}] },
+    { category: "Dairy",   sizeKg: 20, packageId: "dairy-20",
+      contents: [{qty:6,unit:"kg",item:"Whole Milk"},{qty:4,unit:"kg",item:"Cheddar Cheese"},{qty:4,unit:"kg",item:"Plain Yogurt"},{qty:3,unit:"kg",item:"Butter"},{qty:2,unit:"kg",item:"Cream Cheese"},{qty:1,unit:"kg",item:"Sour Cream"}] },
+    { category: "Meat",    sizeKg: 5,  packageId: "meat-5",
+      contents: [{qty:2,unit:"kg",item:"Ground Beef"},{qty:1.5,unit:"kg",item:"Chicken Breast"},{qty:1,unit:"kg",item:"Pork Chops"},{qty:.5,unit:"kg",item:"Beef Sausages"}] },
+    { category: "Meat",    sizeKg: 10, packageId: "meat-10",
+      contents: [{qty:3,unit:"kg",item:"Ground Beef"},{qty:2.5,unit:"kg",item:"Chicken Breast"},{qty:2,unit:"kg",item:"Pork Chops"},{qty:1.5,unit:"kg",item:"Beef Sausages"},{qty:1,unit:"kg",item:"Lamb Shoulder"}] },
+    { category: "Meat",    sizeKg: 20, packageId: "meat-20",
+      contents: [{qty:6,unit:"kg",item:"Ground Beef"},{qty:5,unit:"kg",item:"Chicken Breast"},{qty:4,unit:"kg",item:"Pork Chops"},{qty:3,unit:"kg",item:"Beef Sausages"},{qty:2,unit:"kg",item:"Lamb Shoulder"}] },
+    { category: "Produce", sizeKg: 5,  packageId: "produce-5",
+      contents: [{qty:1,unit:"kg",item:"Tomatoes"},{qty:1,unit:"kg",item:"Carrots"},{qty:1,unit:"kg",item:"Potatoes"},{qty:.5,unit:"kg",item:"Spinach"},{qty:.5,unit:"kg",item:"Broccoli"},{qty:.5,unit:"kg",item:"Apples"}] },
+    { category: "Produce", sizeKg: 10, packageId: "produce-10",
+      contents: [{qty:2,unit:"kg",item:"Tomatoes"},{qty:2,unit:"kg",item:"Carrots"},{qty:2,unit:"kg",item:"Potatoes"},{qty:1,unit:"kg",item:"Spinach"},{qty:1,unit:"kg",item:"Broccoli"},{qty:1,unit:"kg",item:"Apples"},{qty:1,unit:"kg",item:"Onions"}] },
+    { category: "Produce", sizeKg: 20, packageId: "produce-20",
+      contents: [{qty:4,unit:"kg",item:"Tomatoes"},{qty:4,unit:"kg",item:"Carrots"},{qty:4,unit:"kg",item:"Potatoes"},{qty:2,unit:"kg",item:"Spinach"},{qty:2,unit:"kg",item:"Broccoli"},{qty:2,unit:"kg",item:"Apples"},{qty:2,unit:"kg",item:"Onions"}] },
+  ];
+  // API unreachable — show all bundles as out of stock
+  const groups = {};
+  fallback.forEach(pkg => {
+    if (!groups[pkg.category]) groups[pkg.category] = [];
+    groups[pkg.category].push({ ...pkg, canFulfil: false });
+  });
+  let html = "";
+  for (const [category, packages] of Object.entries(groups)) {
+    const emoji = CATEGORY_EMOJI[category] || "";
+    html += `
+      <div class="package-category-group" data-group-category="${category}">
+        <div class="package-category-heading">${emoji} ${category}</div>
+        <div class="package-cards-row">
+          ${packages.map(pkg => `
+            <div class="package-card"
+                 data-pkg-id="${pkg.packageId}"
+                 data-pkg-name="${pkg.category} Bundle — ${pkg.sizeKg} kg"
+                 data-pkg-category="${pkg.category}"
+                 data-pkg-size="${pkg.sizeKg}">
+              <div class="package-card-header">
+                <div class="package-name">${pkg.category} Bundle</div>
+                <span class="package-size-badge">${pkg.sizeKg} kg</span>
+              </div>
+              <button class="package-toggle-desc" onclick="toggleDesc(this)">What's inside ▾</button>
+              <div class="package-desc">
+                <ul>${pkg.contents.map(c => `<li>${c.qty} ${c.unit} ${c.item}</li>`).join("")}</ul>
+              </div>
+              <button class="package-add-btn unavailable" disabled title="Supply network unavailable">
+                Out of Stock
+              </button>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
+  container.innerHTML = html;
+}
+
+
+
+function toggleDesc(btn) {
+  const desc = btn.nextElementSibling;
+  const open = desc.classList.toggle("open");
+  btn.textContent = open ? "What's inside ▴" : "What's inside ▾";
+}
+
+function addPackageToCart(btn) {
+  const card = btn.closest(".package-card");
+  const pkgId       = card.dataset.pkgId;
+  const pkgName     = card.dataset.pkgName;
+  const pkgCategory = card.dataset.pkgCategory;
+  const pkgSize     = parseInt(card.dataset.pkgSize, 10);
+
+  // Packages use a synthetic productId so order orchestration can route them
+  const existing = cart.find(i => i.productId === pkgId);
+  if (existing) {
+    existing.quantity += 1;
+  } else {
+    cart.push({
+      productId:   pkgId,
+      productName: pkgName,
+      quantity:    1,
+      unit:        "package",
+      category:    pkgCategory,
+      isPackage:   true,
+      packageSize: pkgSize,
+    });
+  }
+
+  // Visual feedback on button
+  btn.textContent = "✓ Added";
+  btn.classList.add("added");
+  setTimeout(() => {
+    btn.textContent = "Add to Cart";
+    btn.classList.remove("added");
+  }, 1800);
+
+  renderCart();
+  showToast(`${pkgName} added to cart`, "success");
+  openCart();
+}
+
+// ── Toast notification ──────────────────────────────────────────────────────
+function showToast(message, type = "") {
+  const toast = document.getElementById("orderToast");
+  toast.textContent = message;
+  toast.className = "order-toast" + (type ? " " + type : "");
+  // Force reflow so transition plays
+  void toast.offsetWidth;
+  toast.classList.add("show");
+  clearTimeout(toast._hideTimer);
+  toast._hideTimer = setTimeout(() => toast.classList.remove("show"), 2800);
+}
+
+// ── Cart state ──────────────────────────────────────────────────────────────
+let cart = [];
+
+// ── Cart panel open/close ───────────────────────────────────────────────────
+function openCart() {
+  document.getElementById("cartPanel").classList.add("open");
+  document.getElementById("cartOverlay").classList.add("open");
+}
+
+function closeCart() {
+  document.getElementById("cartPanel").classList.remove("open");
+  document.getElementById("cartOverlay").classList.remove("open");
+}
+
+// Wire up the cart icon in the header (loaded dynamically by components.js)
+document.addEventListener("DOMContentLoaded", () => {
+  // Load bundles from Supply Network API
+  loadPackages();
+
+  // Retry a few times since header loads asynchronously
+  let attempts = 0;
+  const interval = setInterval(() => {
+    const cartBtn = document.querySelector(".icon-btn[title='Cart']");
+    if (cartBtn) {
+      cartBtn.addEventListener("click", openCart);
+      clearInterval(interval);
+    }
+    if (++attempts > 20) clearInterval(interval);
+  }, 100);
+});
+
+// ── Category filter ─────────────────────────────────────────────────────────
+function filterCategory(category, linkEl) {
+  // Update active link
+  document.querySelectorAll("#categoryList a").forEach(a => a.classList.remove("active"));
+  linkEl.classList.add("active");
+
+  // Filter warehouse/supplier product cards
+  const activeTab = document.querySelector(".product-section.active");
+  if (activeTab) {
+    activeTab.querySelectorAll(".product-card").forEach(card => {
+      const match = category === "all" || card.dataset.category === category;
+      card.style.display = match ? "" : "none";
+    });
+  }
+
+  // Filter package category groups
+  document.querySelectorAll(".package-category-group").forEach(group => {
+    const match = category === "all" || group.dataset.groupCategory === category;
+    group.style.display = match ? "" : "none";
+  });
+
+  return false;
+}
+
+// ── Tab switching ───────────────────────────────────────────────────────────
+function switchTab(tabId, btnEl) {
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".product-section").forEach(s => s.classList.remove("active"));
+  btnEl.classList.add("active");
+  document.getElementById(`tab-${tabId}`).classList.add("active");
+}
+
+// ── Quantity controls ───────────────────────────────────────────────────────
+function adjustQty(btn, delta) {
+  const input = btn.parentElement.querySelector(".qty-input");
+  const step = parseFloat(input.step) || 0.5;
+  const min  = parseFloat(input.min)  || 0.1;
+  const max  = parseFloat(input.max)  || 9999;
+  const current = parseFloat(input.value) || 1;
+  const next = Math.max(min, Math.min(max, parseFloat((current + delta * step).toFixed(2))));
+  input.value = next;
+}
+
+// ── Add to cart ─────────────────────────────────────────────────────────────
+function addToCart(btn) {
+  const card = btn.closest(".product-card");
+  const productId   = card.dataset.productId;
+  const productName = card.dataset.productName;
+  const unit        = card.dataset.unit;
+  const qty         = parseFloat(card.querySelector(".qty-input").value) || 1;
+
+  const category = card.dataset.category || "";   // "Produce" | "Dairy" | "Meat"
+
+  const existing = cart.find(i => i.productId === productId);
+  if (existing) {
+    existing.quantity = parseFloat((existing.quantity + qty).toFixed(2));
+  } else {
+    cart.push({ productId, productName, quantity: qty, unit, category });
+  }
+
+  renderCart();
+  openCart();
+}
+
+// ── Remove from cart ────────────────────────────────────────────────────────
+function removeFromCart(productId) {
+  cart = cart.filter(i => i.productId !== productId);
+  renderCart();
+}
+
+// ── Render cart panel ───────────────────────────────────────────────────────
+function renderCart() {
+  const list = document.getElementById("cartItemsList");
+  const btn  = document.getElementById("checkoutBtn");
+
+  if (cart.length === 0) {
+    list.innerHTML = '<p class="cart-empty">Your cart is empty.</p>';
+    btn.disabled = true;
+    updateCartBadge();
+    return;
+  }
+
+  list.innerHTML = cart.map(item => `
+    <div class="cart-item">
+      <div class="cart-item-info">
+        <div class="cart-item-name">${item.productName}</div>
+        <div class="cart-item-qty">${item.isPackage ? `${item.quantity} × ${item.packageSize} kg package` : `${item.quantity} ${item.unit}`}</div>
+      </div>
+      <button class="cart-item-remove" onclick="removeFromCart('${item.productId}')" title="Remove">✕</button>
+    </div>
+  `).join("");
+
+  btn.disabled = false;
+  updateCartBadge();
+}
+
+// ── Cart badge in header ────────────────────────────────────────────────────
+function updateCartBadge() {
+  const badge = document.querySelector(".cart-badge");
+  if (!badge) return;
+  const total = cart.reduce((sum, i) => sum + i.quantity, 0);
+  badge.textContent = total > 0 ? Math.round(total) : "0";
+}
+
+// ── Go to checkout ──────────────────────────────────────────────────────────
+async function goToCheckout() {
+  if (cart.length === 0) return;
+
+  const btn = document.getElementById("checkoutBtn");
+  btn.disabled = true;
+  btn.textContent = "Loading...";
+
+  try {
+    const resp = await fetch("/checkout/initiate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        items: cart,
+        userToken: null,   // C&S JWT token — set when auth is integrated
+      }),
+    });
+
+    const data = await resp.json();
+
+    if (resp.ok && data.redirect_url) {
+      window.location.href = data.redirect_url;
+    } else {
+      alert(data.error || "Could not start checkout. Please try again.");
+      btn.disabled = false;
+      btn.textContent = "Go to Checkout";
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Network error. Please check your connection.");
+    btn.disabled = false;
+    btn.textContent = "Go to Checkout";
+  }
+}
