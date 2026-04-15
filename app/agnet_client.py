@@ -77,3 +77,4 @@ def get_product_catalog():
             catalog[pid]["quantityAvailable"] += product["quantityAvailable"]
             catalog[pid]["vendors"].append(vendor["vendorName"])
     return catalog
+
