@@ -1,139 +1,100 @@
-{% extends "base.html" %}
-{% block title %}Farm2Fork{% endblock %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Farm2Fork — Shop</title>
 
-{% block content %}
+  <!-- Keep your original global styles -->
+  <link rel="stylesheet" href="../static/styles.css" />
 
-  <div class="hero">
-    <div class="hero-text">
-      <h1>Fresh from the farm<br>to your doorstep</h1>
-      <p>A charity initiative connecting the Kitchener, Waterloo, and Cambridge communities with locally grown, seasonal produce.</p>
+  <!-- NEW: extracted styles -->
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="header-placeholder"></div>
+
+  <aside class="cart-panel" id="cartPanel" role="dialog" aria-label="Shopping cart" aria-modal="true">
+    <div class="cart-panel-header">
+      <h2>Your Cart</h2>
+      <button class="close-btn" onclick="closeCart()" aria-label="Close cart">✕</button>
     </div>
-  </div>
+    <div class="cart-items-list" id="cartItemsList">
+      <p class="cart-empty">Your cart is empty.</p>
+    </div>
+    <div class="cart-footer">
+      <div class="cart-total">
+        <span>Total</span>
+        <span class="cart-total-value">Free</span>
+      </div>
+      <button class="checkout-btn" id="checkoutBtn" onclick="goToCheckout()" disabled>
+        Go to Checkout
+      </button>
+    </div>
+  </aside>
 
+  <div class="overlay" id="cartOverlay" onclick="closeCart()"></div>
+
+  <section class="hero">
+    <div class="hero-text">
+      <h1>Fresh From the Farm</h1>
+      <p>Order fresh produce, meat, and dairy sourced directly from local farms — delivered to your door at no cost.</p>
+    </div>
+    <span class="hero-badge">Community Program</span>
+  </section>
 
   <div class="page-body">
-
-    <!-- Temporary categories--change these -->
-    <aside class="sidebar" aria-label="Product categories">
+    <aside class="sidebar">
       <h3>Categories</h3>
-      <ul>
-        <li><a href="#" class="active">All Produce</a></li>
-        <li><a href="#">Vegetables</a></li>
-        <li><a href="#">Fruit</a></li>
-        <li><a href="#">Dairy &amp; Eggs</a></li>
-        <li><a href="#">Bread &amp; Grains</a></li>
-        <li><a href="#">Meat</a></li>
+      <ul id="categoryList">
+        <li><a href="#" class="active" onclick="filterCategory('all', this); event.preventDefault();">All Items</a></li>
+        <li><a href="#" onclick="filterCategory('Produce', this); event.preventDefault();">Produce</a></li>
+        <li><a href="#" onclick="filterCategory('Dairy', this); event.preventDefault();">Dairy</a></li>
+        <li><a href="#" onclick="filterCategory('Meat', this); event.preventDefault();">Meat</a></li>
       </ul>
     </aside>
 
-    <main class="main-content" aria-label="Products">
-        <!-- this should probably be a variable -->
-      <div class="section-label">All Produce — 8 items</div>
-      <div class="product-grid">
-
-
-        <!-- Temporary items--change these -->
-        <div class="product-card">
-          <div class="product-img"><span>Image</span></div>
-          <div class="product-info">
-            <div class="product-name">Strawberries</div>
-            <!-- This could either be the farm that it comes from or catergory such as "root vegetable" for carrot -->
-            <div class="product-origin">Strawberries Farm</div>
-            <div class="product-footer">
-                <!-- Things don't cost anything but i think having a price looks better -->
-              <span class="product-price">$2.10</span>
-              <button class="add-btn" aria-label="Add Strawberries to cart">Add</button>
-            </div>
-          </div>
+    <main class="main-content">
+      <div class="packages-section">
+        <div class="packages-section-title">🛒 Prepackaged Bundles — Pick a size, add to cart</div>
+        <div id="packagesContainer">
+          <p id="packagesLoading">Loading bundles...</p>
         </div>
+      </div>
 
-        <div class="product-card">
-          <div class="product-img"><span>Image</span></div>
-          <div class="product-info">
-            <div class="product-name">Strawberries</div>
-            <div class="product-origin">Strawberries Farm</div>
-            <div class="product-footer">
-              <span class="product-price">$2.10</span>
-              <button class="add-btn" aria-label="Add Strawberries to cart">Add</button>
-            </div>
-          </div>
+      <hr>
+
+      <div class="section-tabs">
+        <button class="tab-btn active" onclick="switchTab('warehouse', this)">Warehouse Stock</button>
+        <button class="tab-btn" onclick="switchTab('supplier', this)">Supplier Catalog</button>
+      </div>
+
+      <div class="product-section active" id="tab-warehouse">
+        <div class="section-label">Available in Warehouse</div>
+        <div class="product-grid" id="warehouseGrid">
+          <!-- unchanged templating -->
         </div>
+      </div>
 
-        <div class="product-card">
-          <div class="product-img"><span>Image</span></div>
-          <div class="product-info">
-            <div class="product-name">Strawberries</div>
-            <div class="product-origin">Strawberries Farm</div>
-            <div class="product-footer">
-              <span class="product-price">$2.10</span>
-              <button class="add-btn" aria-label="Add Strawberries to cart">Add</button>
-            </div>
-          </div>
+      <div class="product-section" id="tab-supplier">
+        <div class="section-label">Supplier Catalog (from AgNet)</div>
+        <div class="product-grid" id="supplierGrid">
+          <!-- unchanged templating -->
         </div>
-
-        <div class="product-card">
-          <div class="product-img"><span>Image</span></div>
-          <div class="product-info">
-            <div class="product-name">Strawberries</div>
-            <div class="product-origin">Strawberries Farm</div>
-            <div class="product-footer">
-              <span class="product-price">$2.10</span>
-              <button class="add-btn" aria-label="Add Strawberries to cart">Add</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="product-card">
-          <div class="product-img"><span>Image</span></div>
-          <div class="product-info">
-            <div class="product-name">Strawberries</div>
-            <div class="product-origin">Strawberries Farm</div>
-            <div class="product-footer">
-              <span class="product-price">$2.10</span>
-              <button class="add-btn" aria-label="Add Strawberries to cart">Add</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="product-card">
-          <div class="product-img"><span>Image</span></div>
-          <div class="product-info">
-            <div class="product-name">Strawberries</div>
-            <div class="product-origin">Strawberries Farm</div>
-            <div class="product-footer">
-              <span class="product-price">2.10</span>
-              <button class="add-btn" aria-label="Add Strawberries to cart">Add</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="product-card">
-          <div class="product-img"><span>Image</span></div>
-          <div class="product-info">
-            <div class="product-name">Strawberries</div>
-            <div class="product-origin">Strawberries Farm</div>
-            <div class="product-footer">
-              <span class="product-price">2.10</span>
-              <button class="add-btn" aria-label="Add Strawberries to cart">Add</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="product-card">
-          <div class="product-img"><span>Image</span></div>
-          <div class="product-info">
-            <div class="product-name">Strawberries</div>
-            <div class="product-origin">Strawberries Farm</div>
-            <div class="product-footer">
-              <span class="product-price">2.10</span>
-              <button class="add-btn" aria-label="Add Strawberries to cart">Add</button>
-            </div>
-          </div>
-        </div>
-
       </div>
     </main>
   </div>
 
+  <div id="footer-placeholder"></div>
+  <div class="order-toast" id="orderToast"></div>
 
-{% endblock %}
+  <script src="/static/components.js"></script>
+  <script src="/static/shop.js"></script>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      updateCartBadge();
+    });
+  </script>
+</body>
+</html>

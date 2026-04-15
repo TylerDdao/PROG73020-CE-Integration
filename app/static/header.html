@@ -1,8 +1,6 @@
-
-
 <header>
 <a class="logo" href="/" aria-label="Farm2Fork home">
-    <span class="logo-icon" aria-hidden="true">       
+    <span class="logo-icon" aria-hidden="true">
             <img src="/static/images/f2f_logo_no_text.png" alt="Farm2Fork logo">
         </span>
     Farm<span class="two">2</span>Fork
@@ -13,17 +11,15 @@
     <a href="/providers">Providers</a>
     <a href="/info">About</a>
     <a href="#">Donate</a>
-    <a href="/secret">Secrets (delete this) </a>
 </nav>
 
 <div class="header-actions">
-    <button class="icon-btn" aria-label="Shopping cart, 2 items" title="Cart">
+    <button class="icon-btn" aria-label="Shopping cart" title="Cart">
     <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/>
         <line x1="3" y1="6" x2="21" y2="6"/>
         <path d="M16 10a4 4 0 01-8 0"/>
     </svg>
-    <span class="cart-badge" aria-hidden="true">2</span>
     </button>
 
     <button class="icon-btn" id="accountBtn" aria-label="My account" title="Account" onclick="openPanel()">
@@ -35,15 +31,12 @@
 </div>
 </header>
 
-
-
 <aside class="account-panel" id="accountPanel" role="dialog" aria-label="Account panel" aria-modal="true">
 <div class="panel-header">
     <h2>My Account</h2>
     <button class="close-btn" onclick="closePanel()" aria-label="Close account panel">✕</button>
 </div>
 <div class="panel-body">
-    <p>Add functionality to these</p>
     <a href="/login" class="panel-section"><span>Log In</span></a>
     <div class="panel-section"><span>Order History</span></div>
     <div class="panel-section"><span>Subscriptions</span></div>
