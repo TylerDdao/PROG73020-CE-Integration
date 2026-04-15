@@ -1088,12 +1088,6 @@ subscription box stuff */
 }
  
 
-/* subscriptions page */
-
-/* ============================================================
-   Farm2Fork — Subscriptions Page
-   Add to static folder and link in subscriptions.html
-   ============================================================ */
 
 .subs-page {
   max-width: 1100px;
@@ -1318,3 +1312,161 @@ subscription box stuff */
 .sub-action-btn.cancel:hover {
   background: #f8d8d8;
 }
+ /* ── Prepackaged bundles ─────────────────────────────── */
+    .packages-section {
+      margin-bottom: 2rem;
+    }
+    .packages-section-title {
+      font-family: Arial, sans-serif;
+      font-size: 0.75rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: bold;
+      margin-bottom: 1rem;
+    }
+    .package-category-group {
+      margin-bottom: 1.6rem;
+    }
+    .package-category-heading {
+      font-family: Arial, sans-serif;
+      font-size: 0.82rem;
+      font-weight: bold;
+      color: var(--green-dark);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 0.7rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .package-category-heading::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+    .package-cards-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 1rem;
+    }
+    .package-card {
+      background: #fff;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.1rem 0.9rem;
+      cursor: pointer;
+      transition: box-shadow 0.15s, transform 0.15s, border-color 0.15s;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .package-card:hover {
+      box-shadow: 0 4px 18px rgba(45,106,45,0.13);
+      transform: translateY(-2px);
+      border-color: var(--green);
+    }
+    .package-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    .package-size-badge {
+      background: var(--green);
+      color: #fff;
+      font-family: Arial, sans-serif;
+      font-size: 0.78rem;
+      font-weight: bold;
+      padding: 3px 9px;
+      border-radius: 12px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .package-name {
+      font-size: 0.9rem;
+      font-weight: bold;
+      color: var(--text);
+      line-height: 1.3;
+    }
+    .package-toggle-desc {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-family: Arial, sans-serif;
+      padding: 0;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      text-align: left;
+      transition: color 0.12s;
+    }
+    .package-toggle-desc:hover { color: var(--green-dark); }
+    .package-desc {
+      display: none;
+      background: var(--green-light);
+      border-radius: 5px;
+      padding: 0.6rem 0.75rem;
+      font-family: Arial, sans-serif;
+      font-size: 0.78rem;
+      color: var(--text);
+      line-height: 1.6;
+    }
+    .package-desc.open { display: block; }
+    .package-desc ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .package-desc ul li::before {
+      content: "✓ ";
+      color: var(--green-dark);
+      font-weight: bold;
+    }
+    .package-add-btn {
+      width: 100%;
+      padding: 0.5rem;
+      background: var(--green);
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      font-family: Arial, sans-serif;
+      font-size: 0.82rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.15s;
+      margin-top: auto;
+    }
+    .package-add-btn:hover { background: var(--green-dark); }
+    .package-add-btn.added {
+      background: #16a34a;
+      pointer-events: none;
+    }
+
+    /* ── Order status toast ──────────────────────────────── */
+    .order-toast {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--green-dark);
+      color: #fff;
+      font-family: Arial, sans-serif;
+      font-size: 0.88rem;
+      padding: 0.75rem 1.4rem;
+      border-radius: 6px;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.2);
+      z-index: 500;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+      opacity: 0;
+      white-space: nowrap;
+    }
+    .order-toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+    .order-toast.success { background: #16a34a; }
+    .order-toast.error   { background: #dc2626; }
