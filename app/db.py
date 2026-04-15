@@ -6,7 +6,7 @@ def get_connection():
     print("[INFO] Getting connection...")
     return mysql.connector.connect(
         host=os.environ.get("DB_HOST", "localhost"),
-        port=int(os.environ.get("DB_PORT", 3307)),
+        port=int(os.environ.get("DB_PORT", 3306)),
         user=os.environ.get("DB_USER", "appuser"),
         password=os.environ.get("DB_PASSWORD", "apppassword"),
         database=os.environ.get("DB_NAME", "inventory"),
