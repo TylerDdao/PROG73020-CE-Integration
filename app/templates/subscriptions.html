@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}My Subscriptions | Farm2Fork{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='subscriptions.css') }}"/>
+{% endblock %}
+
+{% block content %}
+<div class="subs-page">
+  <div class="subs-header">
+    <div>
+      <h1 class="subs-title">My Subscriptions</h1>
+      <p class="subs-subtitle">Manage your recurring orders below.</p>
+    </div>
+    <span class="subs-count" id="subsCount">Loading...</span>
+  </div>
+
+  <div class="subs-grid" id="subsGrid">
+    <p>Loading subscriptions...</p>
+  </div>
+</div>
+
+<div class="modal-overlay" id="editFreqModal" role="dialog" aria-modal="true">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Edit Frequency</h2>
+      <button class="modal-close" onclick="closeEditFreq()">✕</button>
+    </div>
+    <div class="modal-body">
+      <label class="modal-label" for="editFreqSelect">Delivery Frequency</label>
+      <select class="freq-select" id="editFreqSelect">
+        <option value="daily">Daily</option>
+        <option value="weekly">Weekly</option>
+        <option value="bi-weekly">Bi-weekly</option>
+        <option value="monthly">Monthly</option>
+        <option value="3months">Every 3 months</option>
+        <option value="6months">Every 6 months</option>
+        <option value="yearly">Yearly</option>
+      </select>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeEditFreq()">Cancel</button>
+      <button class="btn-confirm" onclick="saveFreq()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="editQtyModal" role="dialog" aria-modal="true">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Edit Quantity</h2>
+      <button class="modal-close" onclick="closeEditQty()">✕</button>
+    </div>
+    <div class="modal-body">
+      <span class="modal-label">Quantity</span>
+      <div class="modal-quantity">
+        <button class="qty-btn" onclick="changeEditQty(-1)">−</button>
+        <span class="qty-display" id="editQtyDisplay">1</span>
+        <button class="qty-btn" onclick="changeEditQty(1)">+</button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeEditQty()">Cancel</button>
+      <button class="btn-confirm" onclick="saveQty()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="cancelModal" role="dialog" aria-modal="true">
+  <div class="modal">
+    <div class="modal-header" style="background: #c0392b;">
+      <h2>Cancel Subscription</h2>
+      <button class="modal-close" onclick="closeCancelModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p>Are you sure you want to cancel this subscription? This cannot be undone.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeCancelModal()">Keep Subscription</button>
+      <button class="btn-confirm" style="background: #c0392b;" onclick="cancelSubscription()">Yes, Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='subscriptions.js') }}"></script>
+
+{% endblock %}
