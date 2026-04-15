@@ -35,5 +35,25 @@ services:
       retries: 5
     restart: unless-stopped
 
-volumes:
-  mysql_data:
+  postgres_db:
+      image: postgres:16
+      container_name: postgres_db
+      ports:
+        - "5433:5432"
+      environment:
+        - POSTGRES_USER=pguser
+        - POSTGRES_PASSWORD=pgpassword
+        - POSTGRES_DB=inventory_pg
+      volumes:
+        - postgres_data:/var/lib/postgresql/data
+        - ./init_postgresql.sql:/docker-entrypoint-initdb.d/init.sql
+      healthcheck:
+        test: ["CMD-SHELL", "pg_isready -U pguser -d inventory_pg"]
+        interval: 10s
+        timeout: 5s
+        retries: 10
+      restart: unless-stopped
+
+  volumes:
+    mysql_data:
+    postgres_data:
