@@ -108,6 +108,30 @@
       <div class="product-section" id="tab-supplier">
         <div class="section-label">Supplier Catalog (from AgNet)</div>
         <div class="product-grid" id="supplierGrid">
+          {% if agnet_catalog %}
+            {% for product in agnet_catalog %}
+            <div class="product-card" data-category="{{ product.hierarchy[0] }}">
+              <div class="product-img">
+                <span>{{ product.hierarchy[0] }}</span>
+              </div>
+              <div class="product-info">
+                <span class="product-category">{{ product.vendorType if product.vendorType else product.hierarchy[0] }}</span>
+                <div class="product-name">{{ product.productName }}</div>
+                <div class="stock-label">
+                  {{ product.quantityAvailable }} {{ product.unit }} across {{ product.vendors | length }} supplier(s)
+                </div>
+                <div class="product-footer">
+                  <span class="product-price">Free</span>
+                  <span style="font-size:0.72rem;color:var(--muted);font-family:Arial,sans-serif;">Supplier stock</span>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <p style="color:var(--muted);font-family:Arial,sans-serif;font-size:0.9rem;">
+              Supplier catalog unavailable. Please try again later.
+            </p>
+          {% endif %}
           <!-- unchanged templating -->
         </div>
       </div>
