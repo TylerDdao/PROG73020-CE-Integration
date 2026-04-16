@@ -41,11 +41,10 @@ def create_app():
     def index():
         _log = logging.getLogger(__name__)
 
-        cis_items = []
+      cis_items = []
         try:
             cis_resp = requests.get(
-                f"{Config.CIS_BASE_URL}/inventory/pooled",
-                headers={"X-API-Key": Config.CIS_API_KEY},
+                "http://165.22.230.110:5002/api/inventory",
                 timeout=8,
             )
             cis_resp.raise_for_status()
