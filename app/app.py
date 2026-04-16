@@ -18,7 +18,17 @@ from cis_client import (
 )
 from cfp_client import sync_primary_files
 from config import Config
-from db import get_customer, get_team_secret
+from db import (
+    get_customer,
+    get_team_secret,
+    create_delivery,
+    get_all_deliveries,
+    get_customer_by_client_id,
+    get_delivery_by_order_id,
+    increment_delivery_count,
+    update_customer_aggregates,
+    update_delivery_status,
+)
 from ods_client import submit_delivery
 
 
@@ -382,6 +392,241 @@ def create_app():
     @app.route("/subscriptions", methods=["GET"])
     def subscriptions():
         return render_template("subscriptions.html")
+    
+   # ---------------------------------------------------
+    # Delivery Execution routes 
+    # ---------------------------------------------------
+
+    def send_update_to_customer_and_subscriptions(client_id, produce, meat, dairy):
+        payload = {
+            "client_id": client_id,
+            "produce": produce,
+            "meat": meat,
+            "dairy": dairy,
+        }
+
+        try:
+            response = requests.post(
+                Config.cs_update_delivery_url(),
+                json=payload,
+                timeout=10,
+            )
+            return {
+                "status_code": response.status_code,
+                "response_text": response.text,
+            }
+        except Exception as e:
+            return {
+                "status_code": None,
+                "response_text": str(e),
+            }
+
+    # Create delivery order
+    @app.route("/order", methods=["POST"])
+    def create_order():
+        data = request.get_json(silent=True)
+
+        if not data:
+            return jsonify({"error": "Invalid JSON body"}), 400
+
+        warehouse_order_number = data.get("warehouseOrderNumber")
+        destination = data.get("destination", {})
+        special_requirements = data.get("specialRequirements", {})
+        requested_at = data.get("requestedAtUtc")
+
+        if not warehouse_order_number:
+            return jsonify({"error": "warehouseOrderNumber is required"}), 400
+
+        city = destination.get("city")
+        if city not in ["Waterloo", "Kitchener", "Cambridge"]:
+            return jsonify({
+                "error": "City must be Waterloo, Kitchener, or Cambridge"
+            }), 400
+
+        address_parts = [
+            destination.get("addressLine1", ""),
+            destination.get("addressLine2", ""),
+            city,
+            destination.get("province", ""),
+            destination.get("postalCode", ""),
+        ]
+        destination_address = ", ".join(part for part in address_parts if part)
+
+        drop_off = special_requirements.get("dropOff", False)
+
+        try:
+            create_delivery(
+                order_id=warehouse_order_number,
+                driver_name="Unassigned",
+                status="Received",
+                needs_signature=not drop_off,
+                destination_address=destination_address,
+            )
+
+            return jsonify({
+                "status": "success",
+                "data": {
+                    "message": "Order received and saved to delivery table",
+                    "warehouseOrderNumber": warehouse_order_number,
+                    "requestedAtUtc": requested_at,
+                },
+                "error": None,
+            }), 201
+
+        except Exception as e:
+            return jsonify({
+                "status": "error",
+                "data": None,
+                "error": str(e),
+            }), 500
+
+    # Update customer aggregates
+    @app.route("/order/aggregates", methods=["POST"])
+    def order_aggregates():
+        data = request.get_json(silent=True)
+
+        if not data:
+            return jsonify({"error": "Invalid JSON body"}), 400
+
+        client_id = data.get("client_id")
+        produce = data.get("produce")
+        meat = data.get("meat")
+        dairy = data.get("dairy")
+
+        if not client_id or produce is None or meat is None or dairy is None:
+            return jsonify({
+                "error": "client_id, produce, meat, and dairy are required"
+            }), 400
+
+        try:
+            updated_rows = update_customer_aggregates(client_id, produce, meat, dairy)
+
+            if updated_rows == 0:
+                return jsonify({
+                    "status": "error",
+                    "data": None,
+                    "error": "Customer not found",
+                }), 404
+
+            return jsonify({
+                "status": "success",
+                "data": {
+                    "client_id": client_id,
+                    "produce": produce,
+                    "meat": meat,
+                    "dairy": dairy,
+                },
+                "error": None,
+            }), 200
+
+        except Exception as e:
+            return jsonify({
+                "status": "error",
+                "data": None,
+                "error": str(e),
+            }), 500
+
+    # Complete delivery
+    @app.route("/order/complete", methods=["POST"])
+    def complete_order():
+        data = request.get_json(silent=True)
+
+        if not data:
+            return jsonify({"error": "Invalid JSON body"}), 400
+
+        order_id = data.get("order_id")
+        client_id = data.get("client_id")
+
+        if not order_id or not client_id:
+            return jsonify({"error": "order_id and client_id are required"}), 400
+
+        try:
+            updated_rows = update_delivery_status(order_id, "Delivered")
+            if updated_rows == 0:
+                return jsonify({
+                    "status": "error",
+                    "data": None,
+                    "error": "Delivery not found",
+                }), 404
+
+            customer_rows = increment_delivery_count(client_id)
+            if customer_rows == 0:
+                return jsonify({
+                    "status": "error",
+                    "data": None,
+                    "error": "Customer not found",
+                }), 404
+
+            customer = get_customer_by_client_id(client_id)
+            if not customer:
+                return jsonify({
+                    "status": "error",
+                    "data": None,
+                    "error": "Customer not found",
+                }), 404
+
+            outbound_result = send_update_to_customer_and_subscriptions(
+                client_id=customer["client_id"],
+                produce=customer["produce"],
+                meat=customer["meat"],
+                dairy=customer["dairy"],
+            )
+
+            return jsonify({
+                "status": "success",
+                "data": {
+                    "message": "Order marked complete",
+                    "order_id": order_id,
+                    "client_id": client_id,
+                    "customer_update_result": outbound_result,
+                },
+                "error": None,
+            }), 200
+
+        except Exception as e:
+            return jsonify({
+                "status": "error",
+                "data": None,
+                "error": str(e),
+            }), 500
+
+    # Delivery dashboard
+    @app.route("/delivery", methods=["GET"])
+    def delivery_dashboard():
+        rows = get_all_deliveries()
+        deliveries = []
+
+        for row in rows:
+            deliveries.append({
+                "id": row[0],
+                "order_id": row[1],
+                "driver": row[2],
+                "status": row[3],
+                "needs_signature": row[4],
+                "destination_address": row[5],
+            })
+
+        return render_template("delivery_dashboard.html", deliveries=deliveries)
+
+    # Delivery details page
+    @app.route("/delivery/<order_id>", methods=["GET"])
+    def delivery_details(order_id):
+        row = get_delivery_by_order_id(order_id)
+
+        if not row:
+            return "Delivery not found", 404
+
+        delivery = {
+            "id": row[0],
+            "order_id": row[1],
+            "driver": row[2],
+            "status": row[3],
+            "needs_signature": row[4],
+            "destination_address": row[5],
+        }
+
+        return render_template("delivery_details.html", delivery=delivery)
+
     
     return app
 
