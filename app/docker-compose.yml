@@ -15,25 +15,25 @@ services:
   #       condition: service_healthy
   #   restart: unless-stopped
 
-  mysql_db:
-    image: mysql:8.0
-    container_name: mysql_db
-    ports:
-      - "3307:3306"
-    environment:
-      - MYSQL_ROOT_PASSWORD=rootpassword
-      - MYSQL_DATABASE=inventory
-      - MYSQL_USER=appuser
-      - MYSQL_PASSWORD=apppassword
-    volumes:
-      - mysql_data:/var/lib/mysql
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpassword"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    restart: unless-stopped
+  # mysql_db:
+  #   image: mysql:8.0
+  #   container_name: mysql_db
+  #   ports:
+  #     - "3307:3306"
+  #   environment:
+  #     - MYSQL_ROOT_PASSWORD=rootpassword
+  #     - MYSQL_DATABASE=inventory
+  #     - MYSQL_USER=appuser
+  #     - MYSQL_PASSWORD=apppassword
+  #   volumes:
+  #     - mysql_data:/var/lib/mysql
+  #     - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+  #   healthcheck:
+  #     test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpassword"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 10
+  #   restart: unless-stopped
 
   postgres_db:
     image: postgres:16
@@ -74,21 +74,21 @@ services:
       - DB_PASSWORD=apppassword
       - DB_NAME=inventory
 
-  main:
-    depends_on:
-      postgres_db:
-        condition: service_healthy
-    build:
-      context: .
-    container_name: main_service
-    working_dir: /app
-    volumes:
-      - ./:/app
-    command: python main.py
-    ports:
-      - "5001:5001"
-    environment:
-      - PYTHONUNBUFFERED=1
+  # main:
+  #   depends_on:
+  #     postgres_db:
+  #       condition: service_healthy
+  #   build:
+  #     context: .
+  #   container_name: main_service
+  #   working_dir: /app
+  #   volumes:
+  #     - ./:/app
+  #   command: python main.py
+  #   ports:
+  #     - "5001:5001"
+  #   environment:
+  #     - PYTHONUNBUFFERED=1
 
 volumes:
   mysql_data:
