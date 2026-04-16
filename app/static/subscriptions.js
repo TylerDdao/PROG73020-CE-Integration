@@ -17,7 +17,7 @@ async function fetchSubscriptions() {
     const grid = document.getElementById('subsGrid');
     
     try {
-        const response = await fetch('http://165.22.230.110:7500/api/get_subscriptions', {
+        const response = await fetch('http://165.22.230.110:23500/api/get_subscriptions', {
             method: 'GET',
             credentials: 'include' 
         });
@@ -88,7 +88,7 @@ async function saveFreq() {
     const newVal = document.getElementById('editFreqSelect').value;
     
     try {
-        const response = await fetch('http://165.22.230.110:7500/api/v1/subscriptions', {
+        const response = await fetch('http://165.22.230.110:23500/api/v1/subscriptions', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
@@ -127,7 +127,7 @@ function changeEditQty(delta) {
 
 async function saveQty() {
     try {
-        const response = await fetch('http://165.22.230.110:7500/api/v1/subscriptions', {
+        const response = await fetch('http://165.22.230.110:23500/api/v1/subscriptions', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
@@ -158,7 +158,7 @@ function closeCancelModal() {
 
 async function cancelSubscription() {
     try {
-        const response = await fetch('http://165.22.230.110:7500/api/v1/subscriptions', {
+        const response = await fetch('http://165.22.230.110:23500/api/v1/subscriptions', {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ subscription_id: editingId }),
