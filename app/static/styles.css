@@ -733,6 +733,7 @@ footer strong {
 
 .modal-overlay.open {
   display: flex;
+  z-index: 9999
 }
 
 

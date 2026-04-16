@@ -8,8 +8,6 @@
   <!-- Keep your original global styles -->
   <link rel="stylesheet" href="../static/styles.css" />
 
-  <!-- NEW: extracted styles -->
-  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div id="header-placeholder"></div>
@@ -43,6 +41,7 @@
     <span class="hero-badge">Community Program</span>
   </section>
 
+  
   <div class="page-body">
     <aside class="sidebar">
       <h3>Categories</h3>
@@ -72,23 +71,81 @@
       <div class="product-section active" id="tab-warehouse">
         <div class="section-label">Available in Warehouse</div>
         <div class="product-grid" id="warehouseGrid">
-          <!-- unchanged templating -->
+          {% if cis_items %}
+            {% for item in cis_items %}
+            <div class="product-card" data-category="{{ item.hierarchy[0] }}" data-product-id="{{ item.productId }}" data-product-name="{{ item.productName }}" data-unit="{{ item.unit }}" data-stock="{{ item.quantityOnHand }}">
+              <div class="product-img">
+                <span>{{ item.hierarchy[0] }}</span>
+              </div>
+              <div class="product-info">
+                <span class="product-category">{{ item.hierarchy[0] }}</span>
+                <div class="product-name">{{ item.productName }}</div>
+                <button class="sub-btn" onclick="openSubModal('{{ item.productName }}', '{{ item.productId }}')">
+                    Subscribe
+                </button>
+                <div class="stock-label {% if item.quantityOnHand < 20 %}stock-low{% endif %}">
+                  {{ item.quantityOnHand }} {{ item.unit }} available
+                </div>
+                <div class="product-footer">
+                  <span class="product-price">Free</span>
+                  <div class="qty-control">
+                    <button class="qty-btn" onclick="adjustQty(this, -1)">−</button>
+                    <input class="qty-input" type="number" value="1" min="0.1" step="0.5" max="{{ item.quantityOnHand }}" />
+                    <button class="qty-btn" onclick="adjustQty(this, 1)">+</button>
+                  </div>
+                </div>
+                <button class="add-btn" style="width:100%;margin-top:8px;" onclick="addToCart(this)">Add to Cart</button>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <p style="color:var(--muted);font-family:Arial,sans-serif;font-size:0.9rem;">
+              Warehouse inventory unavailable. Please try again later.
+            </p>
+          {% endif %}
         </div>
       </div>
 
       <div class="product-section" id="tab-supplier">
         <div class="section-label">Supplier Catalog (from AgNet)</div>
         <div class="product-grid" id="supplierGrid">
-          <!-- unchanged templating -->
+           {% if agnet_catalog %}
+            {% for product in agnet_catalog %}
+            <div class="product-card" data-category="{{ product.hierarchy[0] }}">
+              <div class="product-img">
+                <span>{{ product.hierarchy[0] }}</span>
+              </div>
+              <div class="product-info">
+                <span class="product-category">{{ product.vendorType if product.vendorType else product.hierarchy[0] }}</span>
+                <button 
+                  class="sub-btn"onclick="openSubModal('{{ product.productName }}', '{{ product.productId }}')">
+                  Subscribe
+                </button>
+                <div class="product-name">{{ product.productName }}</div>
+                <div class="stock-label">
+                  {{ product.quantityAvailable }} {{ product.unit }} across {{ product.vendors | length }} supplier(s)
+                </div>
+                <div class="product-footer">
+                  <span class="product-price">Free</span>
+                  <span style="font-size:0.72rem;color:var(--muted);font-family:Arial,sans-serif;">Supplier stock</span>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <p style="color:var(--muted);font-family:Arial,sans-serif;font-size:0.9rem;">
+              Supplier catalog unavailable. Please try again later.
+            </p>
+          {% endif %}
         </div>
       </div>
     </main>
   </div>
 
-  <div id="footer-placeholder"></div>
+  <div id="modal-placeholder"></div>
   <div class="order-toast" id="orderToast"></div>
 
-  <script src="/static/components.js"></script>
+  <script src="{{ url_for('static', filename='components.js') }}"></script>
   <script src="/static/shop.js"></script>
 
   <script>
