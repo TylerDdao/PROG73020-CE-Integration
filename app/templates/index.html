@@ -72,6 +72,35 @@
       <div class="product-section active" id="tab-warehouse">
         <div class="section-label">Available in Warehouse</div>
         <div class="product-grid" id="warehouseGrid">
+           {% if cis_items %}
+            {% for item in cis_items %}
+            <div class="product-card" data-category="{{ item.hierarchy[0] }}" data-product-id="{{ item.productId }}" data-product-name="{{ item.productName }}" data-unit="{{ item.unit }}" data-stock="{{ item.quantityOnHand }}">
+              <div class="product-img">
+                <span>{{ item.hierarchy[0] }}</span>
+              </div>
+              <div class="product-info">
+                <span class="product-category">{{ item.hierarchy[0] }}</span>
+                <div class="product-name">{{ item.productName }}</div>
+                <div class="stock-label {% if item.quantityOnHand < 20 %}stock-low{% endif %}">
+                  {{ item.quantityOnHand }} {{ item.unit }} available
+                </div>
+                <div class="product-footer">
+                  <span class="product-price">Free</span>
+                  <div class="qty-control">
+                    <button class="qty-btn" onclick="adjustQty(this, -1)">−</button>
+                    <input class="qty-input" type="number" value="1" min="0.1" step="0.5" max="{{ item.quantityOnHand }}" />
+                    <button class="qty-btn" onclick="adjustQty(this, 1)">+</button>
+                  </div>
+                </div>
+                <button class="add-btn" style="width:100%;margin-top:8px;" onclick="addToCart(this)">Add to Cart</button>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <p style="color:var(--muted);font-family:Arial,sans-serif;font-size:0.9rem;">
+              Warehouse inventory unavailable. Please try again later.
+            </p>
+          {% endif %}
           <!-- unchanged templating -->
         </div>
       </div>
