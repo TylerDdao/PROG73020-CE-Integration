@@ -4,7 +4,7 @@ from psycopg2 import DatabaseError
 from config import Config
 
 
-# Create PostgreSQL connection using config values
+# Create DB connection
 def get_connection():
     return psycopg2.connect(
         host=Config.db_host(),
@@ -12,11 +12,65 @@ def get_connection():
         user=Config.db_user(),
         password=Config.db_password(),
         port=Config.db_port(),
-        connect_timeout=5
+        connect_timeout=5,
     )
 
 
-# Insert a new delivery row
+# Get customer for login
+def get_customer(client_id, mobile):
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute(
+            """
+            SELECT client_id, mobile
+            FROM customer
+            WHERE client_id = %s AND mobile = %s
+            """,
+            (client_id, mobile),
+        )
+
+        row = cur.fetchone()
+        if not row:
+            return None
+
+        return {
+            "client_id": row[0],
+            "mobile": row[1],
+        }
+
+    finally:
+        cur.close()
+        conn.close()
+
+
+# Get team secret value
+def get_team_secret():
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute(
+            """
+            SELECT secret_value
+            FROM team_secret
+            LIMIT 1
+            """
+        )
+
+        row = cur.fetchone()
+        if not row:
+            return None
+
+        return row[0]
+
+    finally:
+        cur.close()
+        conn.close()
+
+
+# Insert a new delivery
 def create_delivery(order_id, driver_name, status, needs_signature, destination_address):
     conn = get_connection()
     cur = conn.cursor()
@@ -37,27 +91,23 @@ def create_delivery(order_id, driver_name, status, needs_signature, destination_
                 order_id,
                 driver_name,
                 status,
-                str(needs_signature),  # store boolean as text if DB expects varchar
-                destination_address
-            )
+                str(needs_signature),
+                destination_address,
+            ),
         )
-
-        # Save insert
         conn.commit()
         return True
 
     except DatabaseError:
-        # Undo changes if insert fails
         conn.rollback()
         raise
 
     finally:
-        # Always close DB objects
         cur.close()
         conn.close()
 
 
-# Get all deliveries for dashboard
+# Get all deliveries
 def get_all_deliveries():
     conn = get_connection()
     cur = conn.cursor()
@@ -76,7 +126,6 @@ def get_all_deliveries():
             ORDER BY id
             """
         )
-
         return cur.fetchall()
 
     finally:
@@ -84,7 +133,7 @@ def get_all_deliveries():
         conn.close()
 
 
-# Get one delivery using order id
+# Get one delivery by order id
 def get_delivery_by_order_id(order_id):
     conn = get_connection()
     cur = conn.cursor()
@@ -102,9 +151,8 @@ def get_delivery_by_order_id(order_id):
             FROM delivery
             WHERE order_id = %s
             """,
-            (order_id,)
+            (order_id,),
         )
-
         return cur.fetchone()
 
     finally:
@@ -112,7 +160,7 @@ def get_delivery_by_order_id(order_id):
         conn.close()
 
 
-# Update delivery status like Received -> Delivered
+# Update delivery status
 def update_delivery_status(order_id, new_status):
     conn = get_connection()
     cur = conn.cursor()
@@ -124,13 +172,9 @@ def update_delivery_status(order_id, new_status):
             SET status = %s
             WHERE order_id = %s
             """,
-            (new_status, order_id)
+            (new_status, order_id),
         )
-
-        # Save update
         conn.commit()
-
-        # Return number of rows updated
         return cur.rowcount
 
     except DatabaseError:
@@ -142,7 +186,7 @@ def update_delivery_status(order_id, new_status):
         conn.close()
 
 
-# Update customer category totals
+# Update produce / meat / dairy counts
 def update_customer_aggregates(client_id, produce, meat, dairy):
     conn = get_connection()
     cur = conn.cursor()
@@ -156,9 +200,8 @@ def update_customer_aggregates(client_id, produce, meat, dairy):
                 dairy = %s
             WHERE client_id = %s
             """,
-            (produce, meat, dairy, client_id)
+            (produce, meat, dairy, client_id),
         )
-
         conn.commit()
         return cur.rowcount
 
@@ -171,7 +214,7 @@ def update_customer_aggregates(client_id, produce, meat, dairy):
         conn.close()
 
 
-# Increase completed delivery count by 1
+# Increase delivery count
 def increment_delivery_count(client_id):
     conn = get_connection()
     cur = conn.cursor()
@@ -183,9 +226,8 @@ def increment_delivery_count(client_id):
             SET delivery_count = delivery_count + 1
             WHERE client_id = %s
             """,
-            (client_id,)
+            (client_id,),
         )
-
         conn.commit()
         return cur.rowcount
 
@@ -198,7 +240,7 @@ def increment_delivery_count(client_id):
         conn.close()
 
 
-# Get customer details for outbound update
+# Get customer data for outbound update
 def get_customer_by_client_id(client_id):
     conn = get_connection()
     cur = conn.cursor()
@@ -215,22 +257,19 @@ def get_customer_by_client_id(client_id):
             FROM customer
             WHERE client_id = %s
             """,
-            (client_id,)
+            (client_id,),
         )
 
         row = cur.fetchone()
-
-        # Return None if customer not found
         if not row:
             return None
 
-        # Return customer as dictionary
         return {
             "client_id": row[0],
             "produce": row[1],
             "meat": row[2],
             "dairy": row[3],
-            "delivery_count": row[4]
+            "delivery_count": row[4],
         }
 
     finally:

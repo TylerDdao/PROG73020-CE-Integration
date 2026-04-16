@@ -37,15 +37,15 @@ def create_app():
     app.secret_key = Config.SECRET_KEY
     CORS(app)
 
-    # Sync CFP primary files on startup — non-blocking, failure is logged only
+    # Sync CFP files on startup
     try:
         sync_primary_files()
     except Exception as e:
         logging.getLogger(__name__).warning("CFP startup sync failed: %s", e)
 
-    # ------------------------------------------------------------------
-    # Homepage — shop (inventory from CIS + AgNet catalog)
-    # ------------------------------------------------------------------
+    # ---------------------------------------------------
+    # Homepage / inventory
+    # ---------------------------------------------------
 
     @app.route("/", methods=["GET"])
     def index():
@@ -89,18 +89,18 @@ def create_app():
         except Exception as e:
             return jsonify({"error": str(e)}), 503
 
-    # ------------------------------------------------------------------
+    # ---------------------------------------------------
     # Team secret
-    # ------------------------------------------------------------------
+    # ---------------------------------------------------
 
     @app.route("/secret", methods=["GET"])
     def secret():
         secret_value = get_team_secret()
         return jsonify({"secret": secret_value}), 200
 
-    # ------------------------------------------------------------------
-    # C&S Authentication — login / callback / logout
-    # ------------------------------------------------------------------
+    # ---------------------------------------------------
+    # Login / auth
+    # ---------------------------------------------------
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
@@ -110,22 +110,32 @@ def create_app():
             return render_template("login.html", error=None)
 
         client_id = (request.form.get("client_id") or "").strip()
-        mobile    = (request.form.get("mobile") or "").strip()
+        mobile = (request.form.get("mobile") or "").strip()
 
         if not client_id or not mobile:
-            return render_template("login.html", error="Please enter your Client ID and mobile number.")
+            return render_template(
+                "login.html",
+                error="Please enter your Client ID and mobile number.",
+            )
 
         try:
             customer = get_customer(client_id, mobile)
         except Exception as e:
             _log.warning("DB error during login: %s", e)
-            return render_template("login.html", error="Service unavailable. Please try again.")
+            return render_template(
+                "login.html",
+                error="Service unavailable. Please try again.",
+            )
 
         if not customer:
-            return render_template("login.html", error="Invalid Client ID or mobile number.")
+            return render_template(
+                "login.html",
+                error="Invalid Client ID or mobile number.",
+            )
 
         import jwt as pyjwt
         from datetime import timedelta
+
         token = pyjwt.encode(
             {
                 "client_id": customer["client_id"],
@@ -134,14 +144,14 @@ def create_app():
             Config.CS_JWT_PASS,
             algorithm="HS256",
         )
+
         session["user_token"] = token
-        session["client_id"]  = customer["client_id"]
+        session["client_id"] = customer["client_id"]
 
         return redirect("/")
 
     @app.route("/auth/cs", methods=["GET"])
     def auth_cs():
-        """Optional fallback — accepts a C&S-issued JWT via query param."""
         _log = logging.getLogger(__name__)
         token = request.args.get("token", "").strip()
 
@@ -150,12 +160,16 @@ def create_app():
 
         try:
             import jwt as pyjwt
+
             decoded = pyjwt.decode(token, Config.CS_JWT_PASS, algorithms=["HS256"])
             client_id = decoded.get("client_id")
+
             if not client_id:
                 raise ValueError("JWT missing client_id")
+
             session["user_token"] = token
             session["client_id"] = client_id
+
         except Exception as e:
             _log.warning("C&S auth callback failed: %s", e)
             return redirect("/login")
@@ -169,9 +183,9 @@ def create_app():
         session.pop("cart_items", None)
         return redirect("/")
 
-    # ------------------------------------------------------------------
-    # Tyler's routes — providers, info, restock
-    # ------------------------------------------------------------------
+    # ---------------------------------------------------
+    # Other existing pages
+    # ---------------------------------------------------
 
     @app.route("/providers")
     def providers():
@@ -183,24 +197,32 @@ def create_app():
 
     @app.route("/api/v1/restock_request", methods=["GET", "POST"])
     def restock_request():
-        if request.method == "POST":
-            if request.headers.get("X-API-Key") != "bestTeam":
-                return {
-                    "status": "error",
-                    "data": None,
-                    "error": {
-                        "code": "UNAUTHORIZED",
-                        "message": "Invalid team's secret or your team don't have permission for this API"
-                    }
-                }, 401
-            data = request.get_json()
-            print(f"vendorId: {data.get('vendorId')}")
-            print(f"manifest: {data.get('manifest')}")
-            return {"status": "success", "data": None, "error": None}, 200
+        if request.method == "GET":
+            return {
+                "status": "success",
+                "data": {"message": "Restock endpoint available"},
+                "error": None,
+            }, 200
 
-    # ------------------------------------------------------------------
-    # Legacy pass-through routes
-    # ------------------------------------------------------------------
+        if request.headers.get("X-API-Key") != "bestTeam":
+            return {
+                "status": "error",
+                "data": None,
+                "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Invalid team's secret or your team don't have permission for this API",
+                },
+            }, 401
+
+        data = request.get_json(silent=True) or {}
+        print(f"vendorId: {data.get('vendorId')}")
+        print(f"manifest: {data.get('manifest')}")
+
+        return {"status": "success", "data": None, "error": None}, 200
+
+    # ---------------------------------------------------
+    # Legacy CIS pass-through
+    # ---------------------------------------------------
 
     @app.route("/orders/request", methods=["POST"])
     def orders_request():
@@ -238,9 +260,9 @@ def create_app():
         except CISError as e:
             return jsonify({"error": str(e)}), e.status_code
 
-    # ------------------------------------------------------------------
+    # ---------------------------------------------------
     # Checkout
-    # ------------------------------------------------------------------
+    # ---------------------------------------------------
 
     @app.route("/checkout/demo", methods=["GET"])
     def checkout_demo():
@@ -279,8 +301,10 @@ def create_app():
             try:
                 import jwt as pyjwt
                 from cfp_client import get_client
+
                 decoded = pyjwt.decode(user_token, Config.CS_JWT_PASS, algorithms=["HS256"])
                 client = get_client(decoded.get("client_id", ""))
+
                 if client and client.get("address"):
                     addr = client["address"]
                     parts = [p.strip() for p in addr.split(",")]
@@ -341,12 +365,15 @@ def create_app():
             return jsonify({"error": "cis_error", "message": str(e)}), 503
 
         lock_order_id = lock_result["lockOrderId"]
-        lock_token    = lock_result["lockToken"]
+        lock_token = lock_result["lockToken"]
 
         try:
             ship_result = ship_locked_order(lock_order_id, lock_token)
         except LockExpiredError:
-            return jsonify({"error": "lock_expired", "message": "Order could not be finalised. Please try again."}), 409
+            return jsonify({
+                "error": "lock_expired",
+                "message": "Order could not be finalised. Please try again.",
+            }), 409
         except CISError as e:
             return jsonify({"error": "cis_error", "message": str(e)}), 503
 
@@ -359,21 +386,30 @@ def create_app():
             "province": body["province"],
             "postalCode": body.get("postalCode", ""),
         }
+
         submit_delivery(f2f_order_id, shipping_id, destination, drop_off)
 
         user_token = session.get("user_token")
         if user_token:
             try:
                 import jwt as pyjwt
+
                 decoded = pyjwt.decode(user_token, Config.CS_JWT_PASS, algorithms=["HS256"])
                 client_id = decoded.get("client_id")
+
                 if client_id:
                     produce = sum(1 for i in cart_items if i.get("category") == "Produce")
-                    meat    = sum(1 for i in cart_items if i.get("category") == "Meat")
-                    dairy   = sum(1 for i in cart_items if i.get("category") == "Dairy")
+                    meat = sum(1 for i in cart_items if i.get("category") == "Meat")
+                    dairy = sum(1 for i in cart_items if i.get("category") == "Dairy")
+
                     requests.post(
-                        f"{Config.CS_BASE_URL}/update-delivery",
-                        json={"client_id": client_id, "produce": produce, "meat": meat, "dairy": dairy},
+                        Config.cs_update_delivery_url(),
+                        json={
+                            "client_id": client_id,
+                            "produce": produce,
+                            "meat": meat,
+                            "dairy": dairy,
+                        },
                         timeout=5,
                     )
             except Exception as e:
@@ -392,9 +428,9 @@ def create_app():
     @app.route("/subscriptions", methods=["GET"])
     def subscriptions():
         return render_template("subscriptions.html")
-    
-   # ---------------------------------------------------
-    # Delivery Execution routes 
+
+    # ---------------------------------------------------
+    # Delivery Execution routes
     # ---------------------------------------------------
 
     def send_update_to_customer_and_subscriptions(client_id, produce, meat, dairy):
@@ -407,9 +443,9 @@ def create_app():
 
         try:
             response = requests.post(
-                Config.cs_update_delivery_url(),
-                json=payload,
-                timeout=10,
+                 f"{Config.CS_BASE_URL}/update-delivery",
+                 json=payload,
+                 timeout=10,
             )
             return {
                 "status_code": response.status_code,
@@ -421,7 +457,6 @@ def create_app():
                 "response_text": str(e),
             }
 
-    # Create delivery order
     @app.route("/order", methods=["POST"])
     def create_order():
         data = request.get_json(silent=True)
@@ -480,7 +515,6 @@ def create_app():
                 "error": str(e),
             }), 500
 
-    # Update customer aggregates
     @app.route("/order/aggregates", methods=["POST"])
     def order_aggregates():
         data = request.get_json(silent=True)
@@ -526,7 +560,6 @@ def create_app():
                 "error": str(e),
             }), 500
 
-    # Complete delivery
     @app.route("/order/complete", methods=["POST"])
     def complete_order():
         data = request.get_json(silent=True)
@@ -590,7 +623,6 @@ def create_app():
                 "error": str(e),
             }), 500
 
-    # Delivery dashboard
     @app.route("/delivery", methods=["GET"])
     def delivery_dashboard():
         rows = get_all_deliveries()
@@ -608,7 +640,6 @@ def create_app():
 
         return render_template("delivery_dashboard.html", deliveries=deliveries)
 
-    # Delivery details page
     @app.route("/delivery/<order_id>", methods=["GET"])
     def delivery_details(order_id):
         row = get_delivery_by_order_id(order_id)
@@ -627,7 +658,6 @@ def create_app():
 
         return render_template("delivery_details.html", delivery=delivery)
 
-    
     return app
 
 
